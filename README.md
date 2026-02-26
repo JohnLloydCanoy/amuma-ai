@@ -1,3 +1,3 @@
 # amuma-ai
 
-[cite_start]**A real-time, voice-enabled active listening companion and Pre-Therapy Triage Agent.**
+**A real-time, voice-enabled active listening companion and Pre-Therapy Triage Agent.**
