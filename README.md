@@ -2,6 +2,8 @@
 
 # amuma-ai
 
+[![Status](https://img.shields.io/badge/Status-Hackathon_Entry-brightgreen.svg)]()
+
 </div>
 
 > [cite_start]**A real-time, voice-enabled active listening companion and Pre-Therapy Triage Agent.**
