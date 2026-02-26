@@ -3,7 +3,7 @@
 # amuma-ai
 
 [![Status](https://img.shields.io/badge/Status-Hackathon_Entry-brightgreen.svg)]()
-[![Logitech Actions SDK](https://img.shields.io/badge/Logitech_Actions_SDK-Node.js-blue.svg)](https://devstudio.logitech.com/)
+
 
 </div>
 
