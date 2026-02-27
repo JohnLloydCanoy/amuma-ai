@@ -12,7 +12,7 @@ export default function VoiceVisualizer({ isSpeaking }: { isSpeaking: boolean })
             {voiceDelays.map((delay, index) => (
                 <div 
                     key={index} 
-                    className="w-1.5 h-full bg-emerald-600 rounded-full animate-wave" 
+                    className="w-1.5 h-full bg-[#dcdcdc] rounded-full animate-wave" 
                     style={{ animationDelay: `${delay}s` }} 
                 />
             ))}
