@@ -1,7 +1,12 @@
-export default function Home() {
+"use client";
+import React, { useState } from 'react';
+import Visuals from '../../components/voice/visuals';
+
+export default function HomePage() {
+
     return (
         <>
-        <h1 className="text-3xl font-bold underline">Hello world!</h1>
+            <Visuals  />
         </>
     );
 }
