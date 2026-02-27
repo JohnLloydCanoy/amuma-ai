@@ -1,6 +1,6 @@
 "use client";
 import React, { useState } from 'react';
-import VoiceVisualizer from '../../components/voice/voice-visualizer';
+import Visuals from '../../components/voice/visuals';
 
 export default function HomePage() {
     const [isSpeaking, setIsSpeaking] = useState(false);
@@ -13,7 +13,7 @@ export default function HomePage() {
         <div className="p-8 bg-white rounded-2xl shadow-lg flex flex-col items-center gap-6 w-80">
             <h2 className="text-xl font-semibold text-slate-700">Amuma AI Interface</h2>
 
-            <VoiceVisualizer isSpeaking={isSpeaking} />
+            <Visuals isSpeaking={isSpeaking} />
         </div>
 
         <button 

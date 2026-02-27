@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import VoiceVisualizer from '../../components/voice/voice-visualizer';
 
-export default function HomePage() {
+export default function Visuals() {
     const [isSpeaking, setIsSpeaking] = useState(false);
 
     return (
