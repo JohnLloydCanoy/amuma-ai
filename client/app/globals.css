@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+@theme {
+  --animate-wave: wave 1s ease-in-out infinite;
+
+  @keyframes wave {
+    0%, 100% { transform: scaleY(0.2); }
+    50% { transform: scaleY(1); }
+  }
+}
 :root {
   --background: #171717;
   --foreground: #ffffff;
