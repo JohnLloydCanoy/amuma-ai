@@ -9,6 +9,7 @@ export default function VoiceVisualizer({ isSpeaking }: { isSpeaking: boolean })
         <div className="w-1.5 h-full bg-emerald-600 rounded-full animate-wave" style={{ animationDelay: '0.4s' }}></div>
         <div className="w-1.5 h-full bg-emerald-600 rounded-full animate-wave" style={{ animationDelay: '0.1s' }}></div>
         <div className="w-1.5 h-full bg-emerald-600 rounded-full animate-wave" style={{ animationDelay: '0.3s' }}></div>
+        {/* Add more dots as needed */}
         
         </div>
     );
