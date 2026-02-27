@@ -18,7 +18,6 @@ export default function HomePage() {
             {isSpeaking ? "Stop AI Speech" : "Simulate AI Speaking"}
         </button>
 
-        </div>
             </>
     );
 }
