@@ -6,6 +6,7 @@ export default function HomePage() {
 
     return (
         <>
+        <h1 className="text-4xl font-bold text-center text-white">Amoma AI</h1>
             <Visuals  />
         </>
     );
