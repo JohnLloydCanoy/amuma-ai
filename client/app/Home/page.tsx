@@ -9,7 +9,7 @@ export default function HomePage() {
 
 
             <Visuals isSpeaking={isSpeaking} />
-        </div>
+
 
         <button 
             onClick={() => setIsSpeaking(!isSpeaking)}
