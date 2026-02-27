@@ -7,7 +7,6 @@ export default function Visuals() {
 
     return (
         <>
-        <h1 className="text-3xl font-bold ">Hello world!</h1>
         <div className="flex flex-col items-center justify-center min-h-screen  gap-8">
 
         <div className="p-8 bg-white rounded-2xl shadow-lg flex flex-col items-center gap-6 w-80">
