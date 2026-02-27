@@ -3,7 +3,6 @@ import React, { useState } from 'react';
 import Visuals from '../../components/voice/visuals';
 
 export default function HomePage() {
-    const [isSpeaking, setIsSpeaking] = useState(false);
 
     return (
         <>
