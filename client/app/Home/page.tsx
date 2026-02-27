@@ -6,8 +6,8 @@ export default function HomePage() {
 
     return (
         <>
-            <div className="h-20" >
-                <h1 className="text-4xl font-bold text-center text-white">Amoma AI</h1>
+            <div className="h-20 text-center" >
+                <h1 className="text-4xl font-bold  text-white">Amoma AI</h1>
                     <Visuals  />
             </div>
         </> 
