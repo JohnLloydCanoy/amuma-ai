@@ -6,7 +6,7 @@ export default function HomePage() {
 
     return (
         <>
-        <div className="flex flex-col items-center justify-center min-h-screen  gap-8">
+        
 
         <div className="p-8 bg-white rounded-2xl shadow-lg flex flex-col items-center gap-6 w-80">
             <h2 className="text-xl font-semibold text-slate-700">Amuma AI Interface</h2>
