@@ -1,6 +1,6 @@
 "use client";
 import React, { useState } from 'react';
-import VoiceVisualizer from '../../components/voice-visualizer';
+import VoiceVisualizer from '../../components/voice/voice-visualizer';
 
 export default function HomePage() {
     const [isSpeaking, setIsSpeaking] = useState(false);
