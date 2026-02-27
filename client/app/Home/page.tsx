@@ -8,7 +8,7 @@ export default function HomePage() {
         <>
 
 
-            <Visuals isSpeaking={isSpeaking} />
+            <Visuals  />
 
 
         <button 
