@@ -11,9 +11,7 @@ export default function HomePage() {
             <Visuals  />
 
 
-        <button 
-            onClick={() => setIsSpeaking(!isSpeaking)}
-            className="px-6 py-3 bg-slate-600 text-white rounded-full font-medium hover:bg-slate-700 transition-colors shadow-md"
+
         >
 
 
