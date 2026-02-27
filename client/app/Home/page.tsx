@@ -6,9 +6,7 @@ export default function HomePage() {
 
     return (
         <>
-        
 
-            <h2 className="text-xl font-semibold text-slate-700">Amuma AI Interface</h2>
 
             <Visuals isSpeaking={isSpeaking} />
         </div>
