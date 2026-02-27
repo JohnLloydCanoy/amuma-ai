@@ -1,6 +1,7 @@
 "use client";
 import React, { useState } from 'react';
 import VoiceVisualizer from '../../components/voice/voice-visualizer';
+import VoiceAuraContainer from '../../components/voice/voice-aura-container';
 
 export default function Visuals() {
     const [isSpeaking, setIsSpeaking] = useState(false);
