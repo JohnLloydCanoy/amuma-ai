@@ -55,5 +55,9 @@ async def audio_endpoint(websocket: WebSocket):
                                         await websocket.send_bytes(part.inline_data.data)
                 except Exception as e:
                     print(f"Error receiving from Gemini: {e}")
+            await asyncio.gather(
+                receive_from_client(),
+                receive_from_gemini()
+            )
 
                                 
