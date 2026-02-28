@@ -28,3 +28,4 @@
 * [cite_start]📁 **`/database`** - **PostgreSQL via Supabase** securely stores user authentication, session logs, and encrypted Care Handoff documents[cite: 27].
 
 ## 💻 Local Development Setup
+Follow these steps to clone the repository and run both the Next.js frontend and the FastAPI backend on your local machine.
