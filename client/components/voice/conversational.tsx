@@ -22,8 +22,6 @@ const WS_URL = process.env.NEXT_PUBLIC_API_WS_URL ?? "ws://localhost:8000/ws/aud
 const INPUT_SAMPLE_RATE = 16000;   // Gemini expects 16kHz input
 const OUTPUT_SAMPLE_RATE = 24000;  // Gemini outputs 24kHz audio
 const BUFFER_SIZE = 4096;
-const SILENCE_THRESHOLD = 0.02;
-const MIN_VOICE_FRAMES = 3; // require sustained speech, not just a click/pop
 
 // ─── Audio Helpers ─────────────────────────────────────────
 
@@ -45,28 +43,6 @@ function int16ToFloat32(buffer: ArrayBuffer): Float32Array<ArrayBuffer> {
     float32[i] = int16[i] / 32768.0;
   }
   return float32;
-}
-
-/** Returns true if the audio frame is above the silence threshold */
-function isVoiceActive(samples: Float32Array): boolean {
-  // RMS energy check
-  let sum = 0;
-  for (let i = 0; i < samples.length; i++) {
-    sum += samples[i] * samples[i];
-  }
-  const rms = Math.sqrt(sum / samples.length);
-  if (rms < SILENCE_THRESHOLD) return false;
-
-  // Zero-crossing rate — speech has moderate crossings, noise has many
-  let crossings = 0;
-  for (let i = 1; i < samples.length; i++) {
-    if ((samples[i] >= 0) !== (samples[i - 1] >= 0)) crossings++;
-  }
-  const zcr = crossings / samples.length;
-  // High ZCR (> 0.3) with low energy = noise, reject it
-  if (zcr > 0.3 && rms < 0.05) return false;
-
-  return true;
 }
 
 // ─── Hook ──────────────────────────────────────────────────
@@ -94,7 +70,7 @@ export function useConversation(): [ConversationState, ConversationActions] {
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
   const nextPlayRef = useRef(0);
-  const voiceFrameCountRef = useRef(0); // sustained speech counter
+  const turnRef = useRef<TurnState>("idle"); // mirror of turn state accessible in audio callback
 
   // ── Cleanup helper ─────────────────────────────────
   const cleanup = useCallback(() => {
@@ -114,7 +90,7 @@ export function useConversation(): [ConversationState, ConversationActions] {
     playbackCtxRef.current = null;
 
     nextPlayRef.current = 0;
-    voiceFrameCountRef.current = 0;
+    turnRef.current = "idle";
     setTurn("idle");
     setStatus("idle");
   }, []);
@@ -145,6 +121,7 @@ export function useConversation(): [ConversationState, ConversationActions] {
 
       ws.onopen = () => {
         setStatus("connected");
+        turnRef.current = "ai-speaking";
         setTurn("ai-speaking"); // Gemini greets first
 
         // ── Mic → PCM → WS (with VAD) — uses 16kHz mic context ──
@@ -154,15 +131,13 @@ export function useConversation(): [ConversationState, ConversationActions] {
 
         processor.onaudioprocess = (e) => {
           if (ws.readyState !== WebSocket.OPEN) return;
+
+          // Don't send mic audio while AI is speaking — prevents interruption
+          if (turnRef.current === "ai-speaking") return;
+
+          // Send ALL audio to Gemini — it needs to hear both speech
+          // and silence so its server-side VAD can detect turn boundaries
           const samples = e.inputBuffer.getChannelData(0);
-          if (!isVoiceActive(samples)) {
-            voiceFrameCountRef.current = 0; // reset streak
-            return;
-          }
-          voiceFrameCountRef.current++;
-          // Only send after MIN_VOICE_FRAMES consecutive voice frames
-          // This filters out pops, clicks, and brief noise bursts
-          if (voiceFrameCountRef.current < MIN_VOICE_FRAMES) return;
           ws.send(float32ToInt16(samples));
         };
 
@@ -175,6 +150,8 @@ export function useConversation(): [ConversationState, ConversationActions] {
         // Handle turn-complete text signal from backend
         if (typeof event.data === "string") {
           if (event.data === "TURN_COMPLETE") {
+            console.log("✓ AI turn complete — now listening");
+            turnRef.current = "listening";
             setTurn("listening");
           }
           return;
@@ -182,12 +159,18 @@ export function useConversation(): [ConversationState, ConversationActions] {
 
         if (!(event.data instanceof Blob)) return;
 
-        const float32 = int16ToFloat32(await event.data.arrayBuffer());
+        const arrayBuf = await event.data.arrayBuffer();
+        const float32 = int16ToFloat32(arrayBuf);
         if (float32.length === 0 || !playbackCtxRef.current) return;
 
+        console.log(`\ud83d\udd0a Playing ${float32.length} samples`);
+
+        turnRef.current = "ai-speaking";
         setTurn("ai-speaking");
 
         const ctx = playbackCtxRef.current;
+        // Ensure context is running (browser may suspend it)
+        if (ctx.state === "suspended") await ctx.resume();
         const buf = ctx.createBuffer(1, float32.length, OUTPUT_SAMPLE_RATE);
         buf.copyToChannel(float32, 0);
 
@@ -203,6 +186,7 @@ export function useConversation(): [ConversationState, ConversationActions] {
         // When this chunk finishes, revert to listening
         source.onended = () => {
           if (ctx.currentTime >= nextPlayRef.current - 0.05) {
+            turnRef.current = "listening";
             setTurn("listening");
           }
         };

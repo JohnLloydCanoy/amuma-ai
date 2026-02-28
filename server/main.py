@@ -49,10 +49,17 @@ async def audio_endpoint(websocket: WebSocket):
     try:
         config = types.LiveConnectConfig(
             response_modalities=["AUDIO"],
+            speech_config=types.SpeechConfig(
+                voice_config=types.VoiceConfig(
+                    prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                        voice_name="Aoede"
+                    )
+                )
+            ),
             realtime_input_config=types.RealtimeInputConfig(
                 automatic_activity_detection=types.AutomaticActivityDetection(
                     disabled=False,
-                    start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_LOW,
+                    start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_HIGH,
                     end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_HIGH,
                 ),
             ),
@@ -129,7 +136,7 @@ async def audio_endpoint(websocket: WebSocket):
 
             # Task C: Nudge Gemini if the user is silent for too long
             async def silence_check_in():
-                nonlocal last_audio_time
+                nonlocal last_audio_time, session_active
                 try:
                     while session_active:
                         await asyncio.sleep(2)  # Poll every 2 seconds
@@ -149,6 +156,7 @@ async def audio_endpoint(websocket: WebSocket):
                             last_audio_time = asyncio.get_event_loop().time()
                 except Exception as e:
                     print(f"Error in silence check-in: {e}")
+                    session_active = False
 
             await asyncio.gather(
                 receive_from_client(),
@@ -158,4 +166,7 @@ async def audio_endpoint(websocket: WebSocket):
     except Exception as e:
         print(f"Gemini connection error: {e}")
     finally:
-        await websocket.close()
+        try:
+            await websocket.close()
+        except Exception:
+            pass  # already closed
