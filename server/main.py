@@ -77,7 +77,7 @@ async def audio_endpoint(websocket: WebSocket):
                 except Exception as e:
                     print(f"Error receiving from frontend: {e}")
 
-            # Task B
+            # Task B: Forward Gemini audio to client + signal turn completion
             async def receive_from_gemini():
                 try:
                     async for response in session.receive():
@@ -86,6 +86,9 @@ async def audio_endpoint(websocket: WebSocket):
                             for part in server_content.model_turn.parts:
                                 if part.inline_data:
                                     await websocket.send_bytes(part.inline_data.data)
+                        # Signal the frontend that Gemini finished its turn
+                        if server_content and server_content.turn_complete:
+                            await websocket.send_text("TURN_COMPLETE")
                 except Exception as e:
                     print(f"Error receiving from Gemini: {e}")
 
