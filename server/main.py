@@ -59,5 +59,6 @@ async def audio_endpoint(websocket: WebSocket):
                 receive_from_client(),
                 receive_from_gemini()
             )
+    except Exception as e:
 
                                 
