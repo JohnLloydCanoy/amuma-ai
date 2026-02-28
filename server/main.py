@@ -46,4 +46,5 @@ async def audio_endpoint(websocket: WebSocket):
                     print(f"Error receiving from frontend: {e}")
             # Task B
             async def receive_from_gemini():
+                try:
             
