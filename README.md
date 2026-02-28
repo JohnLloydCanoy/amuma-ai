@@ -73,3 +73,5 @@ The backend server handles the secure WebSocket connections to the Gemini Live A
    uvicorn main:app --reload
    ```
    *The backend will run on `http://localhost:8000`.*
+
+### Step 3: Set Up the Next.js Frontend(Client)
