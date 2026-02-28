@@ -31,3 +31,4 @@ export default function VoiceSession() {
                 const audioBlob = new Blob([event.data], { type: "audio/pcm" });
                 const audioUrl = URL.createObjectURL(audioBlob);
                 const audio = new Audio(audioUrl);
+                await audio.play();
