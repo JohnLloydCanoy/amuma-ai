@@ -93,3 +93,5 @@ Open a **new, separate terminal window** and leave the backend running.
 ---
 ## ☁️ Cloud Deployment (Google Cloud Run)
 *(Note: Full deployment scripts and Dockerfiles will be finalized in Phase 4 of development to meet the hackathon's Google Cloud hosting requirement).*
+
+1. The FastAPI backend is packaged using a `Dockerfile`.
