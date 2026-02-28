@@ -36,9 +36,9 @@ function float32ToInt16(float32: Float32Array): ArrayBuffer {
 }
 
 /** Convert Int16 PCM bytes from Gemini → Float32 for Web Audio playback */
-function int16ToFloat32(buffer: ArrayBuffer): Float32Array {
+function int16ToFloat32(buffer: ArrayBuffer): Float32Array<ArrayBuffer> {
   const int16 = new Int16Array(buffer);
-  const float32 = new Float32Array(int16.length);
+  const float32 = new Float32Array(int16.length) as Float32Array<ArrayBuffer>;
   for (let i = 0; i < int16.length; i++) {
     float32[i] = int16[i] / 32768.0;
   }
