@@ -95,3 +95,5 @@ Open a **new, separate terminal window** and leave the backend running.
 *(Note: Full deployment scripts and Dockerfiles will be finalized in Phase 4 of development to meet the hackathon's Google Cloud hosting requirement).*
 
 1. The FastAPI backend is packaged using a `Dockerfile`.
+2. Deployed securely to **Google Cloud Run** for highly scalable, serverless WebSocket handling.
+3. The Next.js frontend is deployed to Vercel, securely routing API requests to the Cloud Run instance.
