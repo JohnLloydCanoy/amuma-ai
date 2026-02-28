@@ -29,3 +29,5 @@
 
 ## 💻 Local Development Setup
 Follow these steps to clone the repository and run both the Next.js frontend and the FastAPI backend on your local machine.
+---
+### Prerequisites
