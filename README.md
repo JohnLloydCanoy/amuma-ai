@@ -58,3 +58,7 @@ The backend server handles the secure WebSocket connections to the Gemini Live A
 2. **Create and activate a virtual environment:**
 * **Windows:** `python -m venv .venv` then `.venv\Scripts\activate`
 * **Mac/Linux:** `python3 -m venv .venv` then `source .venv/bin/activate`
+3. **Install dependencies:**
+```bash
+   pip install -r requirements.txt
+   ```
