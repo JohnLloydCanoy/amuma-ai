@@ -9,3 +9,4 @@ export default function VoiceSession() {
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
 
     const startSession = async () => {
+        try {
