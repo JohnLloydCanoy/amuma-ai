@@ -16,17 +16,20 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"], 
+    allow_origins=["http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+
 @app.get("/")
 async def root():
     return {"status": "online", "message": "Amuma AI backend is ready."}
+
 
 @app.websocket("/ws/audio")
 async def audio_endpoint(websocket: WebSocket):
     await websocket.accept()
     print("Next.js Frontend connected to Amuma Backend!")
+    try:
