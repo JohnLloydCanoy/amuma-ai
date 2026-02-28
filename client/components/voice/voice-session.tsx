@@ -43,3 +43,4 @@ export default function VoiceSession() {
     };
     const stopSession = () => {
         if (mediaRecorderRef.current) {
+            mediaRecorderRef.current.stop();
