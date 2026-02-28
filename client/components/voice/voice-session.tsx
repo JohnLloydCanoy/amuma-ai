@@ -53,3 +53,24 @@ export default function VoiceSession() {
         setIsConnected(false);
         };
     return (
+        <div className="flex flex-col items-center justify-center p-8 bg-slate-900 rounded-xl shadow-lg border border-slate-800 w-full max-w-md mx-auto mt-10">
+        <h2 className="text-2xl font-bold text-white mb-6">Amuma Triage Session</h2>
+        
+        {/* Your custom visualizer! */}
+        <div className="mb-8">
+            <VoiceVisualizer isSpeaking={isSpeaking} />
+        </div>
+
+        <button
+            onClick={isConnected ? stopSession : startSession}
+            className={`px-8 py-3 rounded-full font-bold text-white transition-all ${
+            isConnected 
+                ? "bg-red-500 hover:bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.5)]" 
+                : "bg-emerald-600 hover:bg-emerald-500 shadow-[0_0_15px_rgba(5,150,105,0.5)]"
+            }`}
+        >
+            {isConnected ? "End Session" : "Start Conversation"}
+        </button>
+        </div>
+    );
+    }
