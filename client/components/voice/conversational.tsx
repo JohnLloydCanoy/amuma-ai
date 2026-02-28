@@ -22,6 +22,8 @@ const WS_URL = process.env.NEXT_PUBLIC_API_WS_URL ?? "ws://localhost:8000/ws/aud
 const INPUT_SAMPLE_RATE = 16000;   // Gemini expects 16kHz input
 const OUTPUT_SAMPLE_RATE = 24000;  // Gemini outputs 24kHz audio
 const BUFFER_SIZE = 4096;
+const SPEECH_THRESHOLD = 0.015;    // RMS threshold for speech detection
+const SILENCE_FRAMES_TO_END = 10;  // ~2.5s of silence before signaling end (at 256ms/frame)
 
 // ─── Audio Helpers ─────────────────────────────────────────
 
@@ -70,7 +72,9 @@ export function useConversation(): [ConversationState, ConversationActions] {
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
   const nextPlayRef = useRef(0);
-  const turnRef = useRef<TurnState>("idle"); // mirror of turn state accessible in audio callback
+  const turnRef = useRef<TurnState>("idle");
+  const isSpeakingRef = useRef(false);   // tracks whether we've sent ACTIVITY_START
+  const silenceCountRef = useRef(0);     // consecutive silent frames counter
 
   // ── Cleanup helper ─────────────────────────────────
   const cleanup = useCallback(() => {
@@ -91,6 +95,8 @@ export function useConversation(): [ConversationState, ConversationActions] {
 
     nextPlayRef.current = 0;
     turnRef.current = "idle";
+    isSpeakingRef.current = false;
+    silenceCountRef.current = 0;
     setTurn("idle");
     setStatus("idle");
   }, []);
@@ -131,13 +137,44 @@ export function useConversation(): [ConversationState, ConversationActions] {
 
         processor.onaudioprocess = (e) => {
           if (ws.readyState !== WebSocket.OPEN) return;
+          if (turnRef.current === "ai-speaking") {
+            // Reset speech state while AI talks
+            isSpeakingRef.current = false;
+            silenceCountRef.current = 0;
+            return;
+          }
 
-          // Don't send mic audio while AI is speaking — prevents interruption
-          if (turnRef.current === "ai-speaking") return;
-
-          // Send ALL audio to Gemini — it needs to hear both speech
-          // and silence so its server-side VAD can detect turn boundaries
           const samples = e.inputBuffer.getChannelData(0);
+
+          // Calculate RMS energy
+          let sum = 0;
+          for (let i = 0; i < samples.length; i++) {
+            sum += samples[i] * samples[i];
+          }
+          const rms = Math.sqrt(sum / samples.length);
+          const isVoice = rms >= SPEECH_THRESHOLD;
+
+          // Send activity signals to server for manual turn-taking
+          if (isVoice) {
+            silenceCountRef.current = 0;
+            if (!isSpeakingRef.current) {
+              isSpeakingRef.current = true;
+              ws.send("ACTIVITY_START");
+              console.log("\ud83c\udfa4 Speech detected — ACTIVITY_START");
+            }
+          } else {
+            if (isSpeakingRef.current) {
+              silenceCountRef.current++;
+              if (silenceCountRef.current >= SILENCE_FRAMES_TO_END) {
+                isSpeakingRef.current = false;
+                silenceCountRef.current = 0;
+                ws.send("ACTIVITY_END");
+                console.log("\ud83d\udd07 Silence detected — ACTIVITY_END");
+              }
+            }
+          }
+
+          // Always send audio so Gemini can hear everything
           ws.send(float32ToInt16(samples));
         };
 

@@ -58,7 +58,9 @@ async def audio_endpoint(websocket: WebSocket):
             ),
             realtime_input_config=types.RealtimeInputConfig(
                 automatic_activity_detection=types.AutomaticActivityDetection(
-                    disabled=True,  # We manage turn-taking manually from the client
+                    disabled=False,
+                    start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_HIGH,
+                    end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_HIGH,
                 ),
             ),
             system_instruction=types.Content(
@@ -77,53 +79,36 @@ async def audio_endpoint(websocket: WebSocket):
             # Trigger Gemini's first greeting
             await session.send_client_content(
                 turns=types.Content(role="user", parts=[
-                    types.Part(text="Hello")]),
+                                    types.Part(text="Hello")]),
                 turn_complete=True,
             )
+            # --------------------------------------------
 
+            # Shared timestamp — updated every time we get audio from the client
             last_audio_time = asyncio.get_event_loop().time()
             session_active = True
 
-            # Task A: Receive messages from client (text signals + audio bytes)
+            # Task A: Forward user audio to Gemini (with inactivity timeout)
             async def receive_from_client():
                 nonlocal last_audio_time, session_active
-                INACTIVITY_TIMEOUT = 120
+                INACTIVITY_TIMEOUT = 120  # seconds — auto-close if silent for 2 min
                 try:
                     while True:
                         try:
-                            msg = await asyncio.wait_for(
-                                websocket.receive(), timeout=INACTIVITY_TIMEOUT
+                            data = await asyncio.wait_for(
+                                websocket.receive_bytes(), timeout=INACTIVITY_TIMEOUT
+                            )
+                            last_audio_time = asyncio.get_event_loop().time()
+                            print(f"  ← Got {len(data)} bytes from client")
+                            await session.send_realtime_input(
+                                audio=types.Blob(
+                                    data=data, mime_type="audio/pcm")
                             )
                         except asyncio.TimeoutError:
                             print("Inactivity timeout — closing session.")
                             session_active = False
                             await websocket.close(1000, "Inactivity timeout")
                             return
-
-                        # Text signals from frontend VAD
-                        if "text" in msg:
-                            signal = msg["text"]
-                            if signal == "ACTIVITY_START":
-                                print("  ▶ User started speaking")
-                                await session.send_realtime_input(
-                                    activity_start=types.ActivityStart()
-                                )
-                            elif signal == "ACTIVITY_END":
-                                print("  ■ User stopped speaking")
-                                await session.send_realtime_input(
-                                    activity_end=types.ActivityEnd()
-                                )
-                            continue
-
-                        # Binary audio data
-                        if "bytes" in msg:
-                            data = msg["bytes"]
-                            last_audio_time = asyncio.get_event_loop().time()
-                            await session.send_realtime_input(
-                                audio=types.Blob(
-                                    data=data, mime_type="audio/pcm")
-                            )
-
                 except WebSocketDisconnect:
                     print("User disconnected.")
                     session_active = False
@@ -142,6 +127,7 @@ async def audio_endpoint(websocket: WebSocket):
                                     print(
                                         f"  → Sending {len(part.inline_data.data)} bytes to client")
                                     await websocket.send_bytes(part.inline_data.data)
+                        # Signal the frontend that Gemini finished its turn
                         if server_content and server_content.turn_complete:
                             print("  ✓ Gemini turn complete")
                             await websocket.send_text("TURN_COMPLETE")
@@ -153,7 +139,7 @@ async def audio_endpoint(websocket: WebSocket):
                 nonlocal last_audio_time, session_active
                 try:
                     while session_active:
-                        await asyncio.sleep(2)
+                        await asyncio.sleep(2)  # Poll every 2 seconds
                         elapsed = asyncio.get_event_loop().time() - last_audio_time
                         if elapsed >= SILENCE_CHECK_IN_SECONDS:
                             prompt = random.choice(CHECK_IN_PROMPTS)
@@ -166,6 +152,7 @@ async def audio_endpoint(websocket: WebSocket):
                                 ),
                                 turn_complete=True,
                             )
+                            # Reset timer so we don't spam check-ins
                             last_audio_time = asyncio.get_event_loop().time()
                 except Exception as e:
                     print(f"Error in silence check-in: {e}")
