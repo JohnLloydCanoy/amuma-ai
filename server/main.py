@@ -18,3 +18,10 @@ app.add_middleware(
 @app.get("/")
 async def root():
     return {"status": "online", "message": "Amuma AI backend is ready."}
+
+@app.websocket("/ws/audio")
+async def audio_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    await websocket.send_text("WebSocket connection established. Ready for audio.")
+    # We will add the Gemini Live API connection logic here later
+    await websocket.close()
