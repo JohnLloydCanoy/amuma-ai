@@ -43,3 +43,7 @@ async def audio_endpoint(websocket: WebSocket):
                 except WebSocketDisconnect:
                     print("User disconnected.")
                 except Exception as e:
+                    print(f"Error receiving from frontend: {e}")
+            # Task B
+            
+            
