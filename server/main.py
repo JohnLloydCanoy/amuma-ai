@@ -28,3 +28,4 @@ async def root():
 
 @app.websocket("/ws/audio")
 async def audio_endpoint(websocket: WebSocket):
+    await websocket.accept()
