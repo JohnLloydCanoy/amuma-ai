@@ -63,3 +63,8 @@ The backend server handles the secure WebSocket connections to the Gemini Live A
    pip install -r requirements.txt
    ```
    *(If `requirements.txt` does not exist yet, run: `pip install fastapi uvicorn websockets google-genai python-dotenv`)*
+4. **Environment Variables:**
+   Create a `.env` file in the `server/` directory and add your key:
+   ```text
+   GEMINI_API_KEY=your_api_key_here
+   ```
