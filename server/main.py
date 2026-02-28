@@ -64,6 +64,7 @@ async def audio_endpoint(websocket: WebSocket):
                             data = await asyncio.wait_for(
                                 websocket.receive_bytes(), timeout=INACTIVITY_TIMEOUT
                             )
+                            print(f"  ← Got {len(data)} bytes from client")
                             await session.send_realtime_input(
                                 audio=types.Blob(
                                     data=data, mime_type="audio/pcm")
@@ -85,9 +86,12 @@ async def audio_endpoint(websocket: WebSocket):
                         if server_content and server_content.model_turn:
                             for part in server_content.model_turn.parts:
                                 if part.inline_data:
+                                    print(
+                                        f"  → Sending {len(part.inline_data.data)} bytes to client")
                                     await websocket.send_bytes(part.inline_data.data)
                         # Signal the frontend that Gemini finished its turn
                         if server_content and server_content.turn_complete:
+                            print("  ✓ Gemini turn complete")
                             await websocket.send_text("TURN_COMPLETE")
                 except Exception as e:
                     print(f"Error receiving from Gemini: {e}")

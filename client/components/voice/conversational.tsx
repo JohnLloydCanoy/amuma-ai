@@ -19,7 +19,8 @@ export interface ConversationActions {
 
 // ─── Constants ─────────────────────────────────────────────
 const WS_URL = process.env.NEXT_PUBLIC_API_WS_URL ?? "ws://localhost:8000/ws/audio";
-const SAMPLE_RATE = 24000;
+const INPUT_SAMPLE_RATE = 16000;   // Gemini expects 16kHz input
+const OUTPUT_SAMPLE_RATE = 24000;  // Gemini outputs 24kHz audio
 const BUFFER_SIZE = 4096;
 const SILENCE_THRESHOLD = 0.01;
 
@@ -74,7 +75,8 @@ export function useConversation(): [ConversationState, ConversationActions] {
 
   // ── Refs (mutable across renders, no re-render cost) ──
   const wsRef = useRef<WebSocket | null>(null);
-  const audioCtxRef = useRef<AudioContext | null>(null);
+  const micCtxRef = useRef<AudioContext | null>(null);      // 16kHz for mic capture
+  const playbackCtxRef = useRef<AudioContext | null>(null);  // 24kHz for playback
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
   const nextPlayRef = useRef(0);
@@ -90,8 +92,11 @@ export function useConversation(): [ConversationState, ConversationActions] {
     wsRef.current?.close();
     wsRef.current = null;
 
-    audioCtxRef.current?.close();
-    audioCtxRef.current = null;
+    micCtxRef.current?.close();
+    micCtxRef.current = null;
+
+    playbackCtxRef.current?.close();
+    playbackCtxRef.current = null;
 
     nextPlayRef.current = 0;
     setTurn("idle");
@@ -104,11 +109,15 @@ export function useConversation(): [ConversationState, ConversationActions] {
       setStatus("connecting");
       setError(null);
 
-      // 1) Audio context
+      // 1) Audio contexts — separate sample rates for input vs output
       const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      const audioCtx = new Ctx({ sampleRate: SAMPLE_RATE });
-      await audioCtx.resume();
-      audioCtxRef.current = audioCtx;
+      const micCtx = new Ctx({ sampleRate: INPUT_SAMPLE_RATE });
+      await micCtx.resume();
+      micCtxRef.current = micCtx;
+
+      const playbackCtx = new Ctx({ sampleRate: OUTPUT_SAMPLE_RATE });
+      await playbackCtx.resume();
+      playbackCtxRef.current = playbackCtx;
 
       // 2) Microphone
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -122,9 +131,9 @@ export function useConversation(): [ConversationState, ConversationActions] {
         setStatus("connected");
         setTurn("ai-speaking"); // Gemini greets first
 
-        // ── Mic → PCM → WS (with VAD) ──
-        const micSource = audioCtx.createMediaStreamSource(stream);
-        const processor = audioCtx.createScriptProcessor(BUFFER_SIZE, 1, 1);
+        // ── Mic → PCM → WS (with VAD) — uses 16kHz mic context ──
+        const micSource = micCtx.createMediaStreamSource(stream);
+        const processor = micCtx.createScriptProcessor(BUFFER_SIZE, 1, 1);
         processorRef.current = processor;
 
         processor.onaudioprocess = (e) => {
@@ -135,7 +144,7 @@ export function useConversation(): [ConversationState, ConversationActions] {
         };
 
         micSource.connect(processor);
-        processor.connect(audioCtx.destination);
+        processor.connect(micCtx.destination);
       };
 
       // ── WS → PCM → sequential playback ──
@@ -151,12 +160,12 @@ export function useConversation(): [ConversationState, ConversationActions] {
         if (!(event.data instanceof Blob)) return;
 
         const float32 = int16ToFloat32(await event.data.arrayBuffer());
-        if (float32.length === 0 || !audioCtxRef.current) return;
+        if (float32.length === 0 || !playbackCtxRef.current) return;
 
         setTurn("ai-speaking");
 
-        const ctx = audioCtxRef.current;
-        const buf = ctx.createBuffer(1, float32.length, SAMPLE_RATE);
+        const ctx = playbackCtxRef.current;
+        const buf = ctx.createBuffer(1, float32.length, OUTPUT_SAMPLE_RATE);
         buf.copyToChannel(float32, 0);
 
         const source = ctx.createBufferSource();
