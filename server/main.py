@@ -33,7 +33,7 @@ async def audio_endpoint(websocket: WebSocket):
     await websocket.accept()
     print("Next.js Frontend connected to Amuma Backend!")
     try:
-        async with client.aio.live.connect(model="gemini-2.0-flash") as session:
+        async with client.aio.live.connect(model="gemini-2.0-flash-live-001") as session:
             print("Backend successfully connected to Gemini Live API!")
 
             # --- NEW ADDITION: MAKE GEMINI TALK FIRST ---
