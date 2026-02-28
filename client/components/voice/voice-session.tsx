@@ -32,3 +32,4 @@ export default function VoiceSession() {
                 const audioUrl = URL.createObjectURL(audioBlob);
                 const audio = new Audio(audioUrl);
                 await audio.play();
+            };
