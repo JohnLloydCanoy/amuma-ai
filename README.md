@@ -48,3 +48,4 @@ cd amuma-ai
 
 ---
 
+### Step 2: Set Up the Python Backend (FastAPI)
