@@ -45,3 +45,7 @@ Open your terminal and clone the project to your local machine:
 
 git clone [https://github.com/your-username/amuma-ai.git](https://github.com/your-username/amuma-ai.git)
 cd amuma-ai
+
+---
+
+###
