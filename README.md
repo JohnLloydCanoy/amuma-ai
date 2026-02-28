@@ -50,3 +50,8 @@ cd amuma-ai
 
 ### Step 2: Set Up the Python Backend (FastAPI)
 The backend server handles the secure WebSocket connections to the Gemini Live API.
+
+1. **Navigate to the server folder:**
+   ```bash
+   cd server
+   ```
