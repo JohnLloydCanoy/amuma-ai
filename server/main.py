@@ -25,3 +25,5 @@ app.add_middleware(
 @app.get("/")
 async def root():
     return {"status": "online", "message": "Amuma AI backend is ready."}
+
+@app.websocket("/ws/audio")
