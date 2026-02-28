@@ -35,6 +35,18 @@ async def audio_endpoint(websocket: WebSocket):
     try:
         async with client.aio.live.connect(model="gemini-2.0-flash") as session:
             print("Backend successfully connected to Gemini Live API!")
+            
+            # --- NEW ADDITION: MAKE GEMINI TALK FIRST ---
+            # Send a hidden text prompt to trigger the first voice response
+            initial_prompt = (
+                "Hello! You are Amuma, a safe, empathetic pre-therapy active listening companion. "
+                "Please warmly introduce yourself and ask the user what is on their mind today. "
+                "Keep it brief and comforting."
+            )
+            await session.send(input=initial_prompt)
+            # --------------------------------------------
+
+            # Task A
             async def receive_from_client():
                 try:
                     while True:
@@ -44,6 +56,7 @@ async def audio_endpoint(websocket: WebSocket):
                     print("User disconnected.")
                 except Exception as e:
                     print(f"Error receiving from frontend: {e}")
+            
             # Task B
             async def receive_from_gemini():
                 try:
@@ -55,6 +68,7 @@ async def audio_endpoint(websocket: WebSocket):
                                         await websocket.send_bytes(part.inline_data.data)
                 except Exception as e:
                     print(f"Error receiving from Gemini: {e}")
+            
             await asyncio.gather(
                 receive_from_client(),
                 receive_from_gemini()
