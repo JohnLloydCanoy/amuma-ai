@@ -11,6 +11,7 @@ const wsRef = useRef<WebSocket | null>(null);
 const scriptProcessorRef = useRef<ScriptProcessorNode | null>(null);
 const micStreamRef = useRef<MediaStream | null>(null);
 const audioContextRef = useRef<AudioContext | null>(null);
+const nextPlayTimeRef = useRef<number>(0);
 
 const startSession = async () => {
     try {
@@ -61,14 +62,19 @@ const startSession = async () => {
             float32Data[i] = int16Data[i] / 32768.0; 
         }
 
-        if (audioContextRef.current) {
+        if (audioContextRef.current && float32Data.length > 0) {
             const audioBuffer = audioContextRef.current.createBuffer(1, float32Data.length, 24000);
             audioBuffer.copyToChannel(float32Data, 0);
 
             const source = audioContextRef.current.createBufferSource();
             source.buffer = audioBuffer;
             source.connect(audioContextRef.current.destination);
-            source.start();
+
+            // Schedule chunks sequentially so they don't overlap
+            const now = audioContextRef.current.currentTime;
+            const startAt = Math.max(now, nextPlayTimeRef.current);
+            source.start(startAt);
+            nextPlayTimeRef.current = startAt + audioBuffer.duration;
         }
         }
     };
@@ -98,6 +104,7 @@ const stopSession = () => {
     if (audioContextRef.current) {
     audioContextRef.current.close();
     }
+    nextPlayTimeRef.current = 0;
     setIsSpeaking(false);
     setIsConnected(false);
 };
