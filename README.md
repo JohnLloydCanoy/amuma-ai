@@ -42,3 +42,5 @@ Make sure you have the following installed on your system:
 Open your terminal and clone the project to your local machine:
 
 ```bash
+
+git clone [https://github.com/your-username/amuma-ai.git](https://github.com/your-username/amuma-ai.git)
