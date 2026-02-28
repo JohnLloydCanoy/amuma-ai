@@ -29,3 +29,4 @@ export default function VoiceSession() {
             };
             wsRef.current.onmessage = async (event) => {
                 const audioBlob = new Blob([event.data], { type: "audio/pcm" });
+                const audioUrl = URL.createObjectURL(audioBlob);
