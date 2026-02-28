@@ -37,3 +37,8 @@ export default function VoiceSession() {
                 console.log("Disconnected from backend");
                 stopSession();
             };
+        } catch (error) {
+        console.error("Error accessing microphone:", error);
+        }
+    };
+    const stopSession = () => {
