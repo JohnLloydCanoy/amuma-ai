@@ -65,7 +65,8 @@ async def audio_endpoint(websocket: WebSocket):
                                 websocket.receive_bytes(), timeout=INACTIVITY_TIMEOUT
                             )
                             await session.send_realtime_input(
-                                audio=types.Blob(data=data, mime_type="audio/pcm")
+                                audio=types.Blob(
+                                    data=data, mime_type="audio/pcm")
                             )
                         except asyncio.TimeoutError:
                             print("Inactivity timeout — closing session.")
