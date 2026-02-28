@@ -68,3 +68,8 @@ The backend server handles the secure WebSocket connections to the Gemini Live A
    ```text
    GEMINI_API_KEY=your_api_key_here
    ```
+5. **Start the server:**
+   ```bash
+   uvicorn main:app --reload
+   ```
+   *The backend will run on `http://localhost:8000`.*
