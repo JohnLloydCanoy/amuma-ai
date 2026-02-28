@@ -26,3 +26,4 @@
 * 📁 **`/client`** - Built with **Next.js** and **Tailwind CSS**. [cite_start]It manages the clean UI and WebRTC audio streaming logic to capture and play back audio chunks[cite: 21, 22].
 * [cite_start]📁 **`/server`** - A secure **Python (FastAPI)** backend that handles asynchronous WebSocket connections, safely hiding the Gemini API keys from the client[cite: 23, 24]. [cite_start]It is containerized using Docker and deployed to Google Cloud Run[cite: 28].
 * [cite_start]📁 **`/database`** - **PostgreSQL via Supabase** securely stores user authentication, session logs, and encrypted Care Handoff documents[cite: 27].
+
