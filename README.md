@@ -75,3 +75,4 @@ The backend server handles the secure WebSocket connections to the Gemini Live A
    *The backend will run on `http://localhost:8000`.*
 
 ### Step 3: Set Up the Next.js Frontend(Client)
+Open a **new, separate terminal window** and leave the backend running.
