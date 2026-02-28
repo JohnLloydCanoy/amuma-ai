@@ -36,30 +36,41 @@ async def audio_endpoint(websocket: WebSocket):
     try:
         config = types.LiveConnectConfig(
             response_modalities=["AUDIO"],
+            system_instruction=types.Content(
+                parts=[types.Part(text=(
+                    "You are Amuma, a safe, empathetic pre-therapy active listening companion. "
+                    "Warmly greet the user and ask what is on their mind. "
+                    "Keep responses brief and comforting."
+                ))]
+            ),
         )
         async with client.aio.live.connect(model="gemini-2.5-flash-native-audio-latest", config=config) as session:
             print("Backend successfully connected to Gemini Live API!")
 
-            # --- MAKE GEMINI TALK FIRST ---
-            # Send a hidden text prompt to trigger the first voice response
-            initial_prompt = (
-                "Hello! You are Amuma, a safe, empathetic pre-therapy active listening companion. "
-                "Please warmly introduce yourself and ask the user what is on their mind today. "
-                "Keep it brief and comforting."
-            )
+            # Trigger Gemini's first greeting
             await session.send_client_content(
                 turns=types.Content(role="user", parts=[
-                                    types.Part(text=initial_prompt)]),
+                                    types.Part(text="Hello")]),
                 turn_complete=True,
             )
             # --------------------------------------------
 
-            # Task A
+            # Task A: Forward user audio to Gemini (with inactivity timeout)
             async def receive_from_client():
+                INACTIVITY_TIMEOUT = 120  # seconds — auto-close if silent for 2 min
                 try:
                     while True:
-                        data = await websocket.receive_bytes()
-                        await session.send(input={"data": data, "mime_type": "audio/pcm"})
+                        try:
+                            data = await asyncio.wait_for(
+                                websocket.receive_bytes(), timeout=INACTIVITY_TIMEOUT
+                            )
+                            await session.send_realtime_input(
+                                audio=types.Blob(data=data, mime_type="audio/pcm")
+                            )
+                        except asyncio.TimeoutError:
+                            print("Inactivity timeout — closing session.")
+                            await websocket.close(1000, "Inactivity timeout")
+                            return
                 except WebSocketDisconnect:
                     print("User disconnected.")
                 except Exception as e:

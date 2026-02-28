@@ -37,6 +37,17 @@ const startSession = async () => {
         processor.onaudioprocess = (e) => {
             if (wsRef.current?.readyState === WebSocket.OPEN) {
             const float32 = e.inputBuffer.getChannelData(0);
+
+            // --- SILENCE DETECTION (VAD) ---
+            // Only send audio if the user is actually speaking
+            let sumSquares = 0;
+            for (let i = 0; i < float32.length; i++) {
+              sumSquares += float32[i] * float32[i];
+            }
+            const rms = Math.sqrt(sumSquares / float32.length);
+            if (rms < 0.01) return; // Skip silent frames
+            // --------------------------------
+
             // Convert Float32 → Int16 PCM for Gemini
             const int16 = new Int16Array(float32.length);
             for (let i = 0; i < float32.length; i++) {
