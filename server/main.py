@@ -38,3 +38,4 @@ async def audio_endpoint(websocket: WebSocket):
             async def receive_from_client():
                 try:
                     while True:
+                        data = await websocket.receive_bytes()
