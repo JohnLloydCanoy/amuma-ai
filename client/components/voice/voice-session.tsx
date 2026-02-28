@@ -34,3 +34,5 @@ export default function VoiceSession() {
                 await audio.play();
             };
             wsRef.current.onclose = () => {
+                console.log("Disconnected from backend");
+                
