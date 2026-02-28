@@ -80,3 +80,7 @@ Open a **new, separate terminal window** and leave the backend running.
    ```bash
    cd client
    ```
+2. **Install Node dependencies:**
+   ```bash
+   npm install
+   ```
