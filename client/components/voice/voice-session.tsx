@@ -11,3 +11,10 @@ export default function VoiceSession() {
     const startSession = async () => {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            {// Connecting the FastAPI WebSocket for audio streaming}
+            wsRef.current = new WebSocket("ws://localhost:8000/ws/audio");
+
+            wsRef.current.onopen = () => {
+                console.log("Connected to Amuma Backend");
+                setIsConnected(true);
+                setIsSpeaking(true);
