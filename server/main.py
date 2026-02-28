@@ -60,5 +60,6 @@ async def audio_endpoint(websocket: WebSocket):
                 receive_from_gemini()
             )
     except Exception as e:
-
-                                
+        print(f"Gemini connection error: {e}")
+    finally:
+        await websocket.close()
