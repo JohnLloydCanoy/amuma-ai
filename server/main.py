@@ -36,3 +36,5 @@ async def audio_endpoint(websocket: WebSocket):
         async with client.aio.live.connect(model="gemini-2.0-flash-exp") as session:
             print("Backend successfully connected to Gemini Live API!")
             async def receive_from_client():
+                try:
+                    while True:
