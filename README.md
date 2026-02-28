@@ -62,3 +62,4 @@ The backend server handles the secure WebSocket connections to the Gemini Live A
 ```bash
    pip install -r requirements.txt
    ```
+   *(If `requirements.txt` does not exist yet, run: `pip install fastapi uvicorn websockets google-genai python-dotenv`)*
