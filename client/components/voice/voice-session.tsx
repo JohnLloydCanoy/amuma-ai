@@ -46,3 +46,6 @@ export default function VoiceSession() {
             mediaRecorderRef.current.stop();
             mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
     }
+        if (wsRef.current) {
+        wsRef.current.close();
+        }
