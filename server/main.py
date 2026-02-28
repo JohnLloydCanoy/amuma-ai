@@ -49,11 +49,20 @@ async def audio_endpoint(websocket: WebSocket):
     try:
         config = types.LiveConnectConfig(
             response_modalities=["AUDIO"],
+            realtime_input_config=types.RealtimeInputConfig(
+                automatic_activity_detection=types.AutomaticActivityDetection(
+                    disabled=False,
+                    start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_LOW,
+                    end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_LOW,
+                ),
+            ),
             system_instruction=types.Content(
                 parts=[types.Part(text=(
                     "You are Amuma, a safe, empathetic pre-therapy active listening companion. "
                     "Warmly greet the user and ask what is on their mind. "
-                    "Keep responses brief and comforting."
+                    "Keep responses brief and comforting. "
+                    "IMPORTANT: Ignore any background noise, keyboard clicks, ambient sounds, "
+                    "or non-speech audio. Only respond to clear human speech directed at you."
                 ))]
             ),
         )

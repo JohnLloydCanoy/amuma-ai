@@ -22,7 +22,8 @@ const WS_URL = process.env.NEXT_PUBLIC_API_WS_URL ?? "ws://localhost:8000/ws/aud
 const INPUT_SAMPLE_RATE = 16000;   // Gemini expects 16kHz input
 const OUTPUT_SAMPLE_RATE = 24000;  // Gemini outputs 24kHz audio
 const BUFFER_SIZE = 4096;
-const SILENCE_THRESHOLD = 0.01;
+const SILENCE_THRESHOLD = 0.02;
+const MIN_VOICE_FRAMES = 3; // require sustained speech, not just a click/pop
 
 // ─── Audio Helpers ─────────────────────────────────────────
 
@@ -48,11 +49,24 @@ function int16ToFloat32(buffer: ArrayBuffer): Float32Array<ArrayBuffer> {
 
 /** Returns true if the audio frame is above the silence threshold */
 function isVoiceActive(samples: Float32Array): boolean {
+  // RMS energy check
   let sum = 0;
   for (let i = 0; i < samples.length; i++) {
     sum += samples[i] * samples[i];
   }
-  return Math.sqrt(sum / samples.length) >= SILENCE_THRESHOLD;
+  const rms = Math.sqrt(sum / samples.length);
+  if (rms < SILENCE_THRESHOLD) return false;
+
+  // Zero-crossing rate — speech has moderate crossings, noise has many
+  let crossings = 0;
+  for (let i = 1; i < samples.length; i++) {
+    if ((samples[i] >= 0) !== (samples[i - 1] >= 0)) crossings++;
+  }
+  const zcr = crossings / samples.length;
+  // High ZCR (> 0.3) with low energy = noise, reject it
+  if (zcr > 0.3 && rms < 0.05) return false;
+
+  return true;
 }
 
 // ─── Hook ──────────────────────────────────────────────────
@@ -80,6 +94,7 @@ export function useConversation(): [ConversationState, ConversationActions] {
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
   const nextPlayRef = useRef(0);
+  const voiceFrameCountRef = useRef(0); // sustained speech counter
 
   // ── Cleanup helper ─────────────────────────────────
   const cleanup = useCallback(() => {
@@ -99,6 +114,7 @@ export function useConversation(): [ConversationState, ConversationActions] {
     playbackCtxRef.current = null;
 
     nextPlayRef.current = 0;
+    voiceFrameCountRef.current = 0;
     setTurn("idle");
     setStatus("idle");
   }, []);
@@ -139,7 +155,14 @@ export function useConversation(): [ConversationState, ConversationActions] {
         processor.onaudioprocess = (e) => {
           if (ws.readyState !== WebSocket.OPEN) return;
           const samples = e.inputBuffer.getChannelData(0);
-          if (!isVoiceActive(samples)) return;
+          if (!isVoiceActive(samples)) {
+            voiceFrameCountRef.current = 0; // reset streak
+            return;
+          }
+          voiceFrameCountRef.current++;
+          // Only send after MIN_VOICE_FRAMES consecutive voice frames
+          // This filters out pops, clicks, and brief noise bursts
+          if (voiceFrameCountRef.current < MIN_VOICE_FRAMES) return;
           ws.send(float32ToInt16(samples));
         };
 
