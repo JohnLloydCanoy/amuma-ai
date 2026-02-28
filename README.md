@@ -84,3 +84,8 @@ Open a **new, separate terminal window** and leave the backend running.
    ```bash
    npm install
    ```
+3. **Start the frontend:**
+   ```bash
+   npm run dev
+   ```
+   *The frontend will run on `http://localhost:3000`.*
