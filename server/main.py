@@ -40,3 +40,4 @@ async def audio_endpoint(websocket: WebSocket):
                     while True:
                         data = await websocket.receive_bytes()
                         await session.send(input={"data": data, "mime_type": "audio/pcm"})
+                    except WebSocketDisconnect:
