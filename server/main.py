@@ -4,9 +4,10 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from google import genai
+from google.genai import types
 
 load_dotenv()
-client = genai.Client()
+client = genai.Client(api_key=os.getenv('GEMINI_API_KEY'))
 
 app = FastAPI(
     title="Amuma AI API",
@@ -33,17 +34,24 @@ async def audio_endpoint(websocket: WebSocket):
     await websocket.accept()
     print("Next.js Frontend connected to Amuma Backend!")
     try:
-        async with client.aio.live.connect(model="gemini-2.0-flash-live-001") as session:
+        config = types.LiveConnectConfig(
+            response_modalities=["AUDIO"],
+        )
+        async with client.aio.live.connect(model="gemini-2.5-flash-native-audio-latest", config=config) as session:
             print("Backend successfully connected to Gemini Live API!")
 
-            # --- NEW ADDITION: MAKE GEMINI TALK FIRST ---
+            # --- MAKE GEMINI TALK FIRST ---
             # Send a hidden text prompt to trigger the first voice response
             initial_prompt = (
                 "Hello! You are Amuma, a safe, empathetic pre-therapy active listening companion. "
                 "Please warmly introduce yourself and ask the user what is on their mind today. "
                 "Keep it brief and comforting."
             )
-            await session.send(input=initial_prompt, end_of_turn=True)
+            await session.send_client_content(
+                turns=types.Content(role="user", parts=[
+                                    types.Part(text=initial_prompt)]),
+                turn_complete=True,
+            )
             # --------------------------------------------
 
             # Task A
