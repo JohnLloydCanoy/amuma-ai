@@ -6,3 +6,4 @@ from fastapi.middleware.cors import CORSMiddleware
 from google import genai
 
 load_dotenv()
+client = genai.Client()
