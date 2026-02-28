@@ -51,3 +51,6 @@ async def audio_endpoint(websocket: WebSocket):
                         server_content = response.server_content
                         if server_content and server_content.model_turn:
                             for part in server_content.model_turn.parts:
+                                    if part.inline_data:
+                                        await websocket.send_bytes(part.inline_data.data)
+                                
