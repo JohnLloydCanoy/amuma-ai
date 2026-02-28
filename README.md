@@ -56,3 +56,4 @@ The backend server handles the secure WebSocket connections to the Gemini Live A
    cd server
    ```
 2. **Create and activate a virtual environment:**
+* **Windows:** `python -m venv .venv` then `.venv\Scripts\activate`
