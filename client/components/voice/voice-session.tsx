@@ -49,3 +49,6 @@ export default function VoiceSession() {
         if (wsRef.current) {
         wsRef.current.close();
         }
+        setIsSpeaking(false);
+    setIsConnected(false);
+        };
