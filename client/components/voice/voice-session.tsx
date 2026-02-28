@@ -6,13 +6,18 @@ import VoiceVisualizer from "./voice-visualizer";
 export default function VoiceSession() {
 const [isSpeaking, setIsSpeaking] = useState(false);
 const [isConnected, setIsConnected] = useState(false);
+
 const wsRef = useRef<WebSocket | null>(null);
 const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+const audioContextRef = useRef<AudioContext | null>(null);
 
 const startSession = async () => {
     try {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    audioContextRef.current = new AudioContextClass({ sampleRate: 24000 });
+
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    
+
     wsRef.current = new WebSocket("ws://localhost:8000/ws/audio");
 
     wsRef.current.onopen = () => {
@@ -26,15 +31,31 @@ const startSession = async () => {
             wsRef.current.send(event.data);
         }
         };
+
         mediaRecorderRef.current.start(250);
     };
 
+    // 5. Handle incoming raw PCM audio from Gemini
     wsRef.current.onmessage = async (event) => {
+        if (event.data instanceof Blob) {
+        const arrayBuffer = await event.data.arrayBuffer();
+        
+        const int16Data = new Int16Array(arrayBuffer);
+        const float32Data = new Float32Array(int16Data.length);
+        for (let i = 0; i < int16Data.length; i++) {
+            float32Data[i] = int16Data[i] / 32768.0; 
+        }
 
-        const audioBlob = new Blob([event.data], { type: "audio/pcm" });
-        const audioUrl = URL.createObjectURL(audioBlob);
-        const audio = new Audio(audioUrl);
-        await audio.play();
+        if (audioContextRef.current) {
+            const audioBuffer = audioContextRef.current.createBuffer(1, float32Data.length, 24000);
+            audioBuffer.copyToChannel(float32Data, 0);
+
+            const source = audioContextRef.current.createBufferSource();
+            source.buffer = audioBuffer;
+            source.connect(audioContextRef.current.destination);
+            source.start();
+        }
+        }
     };
 
     wsRef.current.onclose = () => {
@@ -43,7 +64,7 @@ const startSession = async () => {
     };
 
     } catch (error) {
-    console.error("Error accessing microphone:", error);
+    console.error("Error starting session:", error);
     }
 };
 
@@ -54,6 +75,9 @@ const stopSession = () => {
     }
     if (wsRef.current) {
     wsRef.current.close();
+    }
+    if (audioContextRef.current) {
+    audioContextRef.current.close();
     }
     setIsSpeaking(false);
     setIsConnected(false);
