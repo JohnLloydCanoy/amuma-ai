@@ -18,3 +18,11 @@ export default function VoiceSession() {
                 console.log("Connected to Amuma Backend");
                 setIsConnected(true);
                 setIsSpeaking(true);
+                
+                mediaRecorderRef.current = new MediaRecorder(stream);
+                mediaRecorderRef.current.ondataavailable = (event) => {
+                if (event.data.size > 0 && wsRef.current?.readyState === WebSocket.OPEN) {
+                    wsRef.current.send(event.data);
+                }
+                };
+                mediaRecorderRef.current.start(250);
