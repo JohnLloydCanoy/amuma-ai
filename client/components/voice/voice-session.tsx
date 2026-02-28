@@ -8,15 +8,18 @@ const [isSpeaking, setIsSpeaking] = useState(false);
 const [isConnected, setIsConnected] = useState(false);
 
 const wsRef = useRef<WebSocket | null>(null);
-const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+const scriptProcessorRef = useRef<ScriptProcessorNode | null>(null);
+const micStreamRef = useRef<MediaStream | null>(null);
 const audioContextRef = useRef<AudioContext | null>(null);
 
 const startSession = async () => {
     try {
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
     audioContextRef.current = new AudioContextClass({ sampleRate: 24000 });
+    await audioContextRef.current.resume();
 
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    micStreamRef.current = stream;
 
     wsRef.current = new WebSocket("ws://localhost:8000/ws/audio");
 
@@ -25,14 +28,26 @@ const startSession = async () => {
         setIsConnected(true);
         setIsSpeaking(true);
 
-        mediaRecorderRef.current = new MediaRecorder(stream);
-        mediaRecorderRef.current.ondataavailable = (event) => {
-        if (event.data.size > 0 && wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(event.data);
-        }
+        // Capture raw PCM audio via ScriptProcessorNode
+        const source = audioContextRef.current!.createMediaStreamSource(stream);
+        const processor = audioContextRef.current!.createScriptProcessor(4096, 1, 1);
+        scriptProcessorRef.current = processor;
+
+        processor.onaudioprocess = (e) => {
+          if (wsRef.current?.readyState === WebSocket.OPEN) {
+            const float32 = e.inputBuffer.getChannelData(0);
+            // Convert Float32 → Int16 PCM for Gemini
+            const int16 = new Int16Array(float32.length);
+            for (let i = 0; i < float32.length; i++) {
+              const s = Math.max(-1, Math.min(1, float32[i]));
+              int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+            }
+            wsRef.current.send(int16.buffer);
+          }
         };
 
-        mediaRecorderRef.current.start(250);
+        source.connect(processor);
+        processor.connect(audioContextRef.current!.destination);
     };
 
     // 5. Handle incoming raw PCM audio from Gemini
@@ -69,9 +84,13 @@ const startSession = async () => {
 };
 
 const stopSession = () => {
-    if (mediaRecorderRef.current) {
-    mediaRecorderRef.current.stop();
-    mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+    if (scriptProcessorRef.current) {
+    scriptProcessorRef.current.disconnect();
+    scriptProcessorRef.current = null;
+    }
+    if (micStreamRef.current) {
+    micStreamRef.current.getTracks().forEach(track => track.stop());
+    micStreamRef.current = null;
     }
     if (wsRef.current) {
     wsRef.current.close();
