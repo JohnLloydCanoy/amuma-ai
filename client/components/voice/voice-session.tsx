@@ -7,3 +7,5 @@ export default function VoiceSession() {
     const [isConnected, setIsConnected] = useState(false);
     const wsRef = useRef<WebSocket | null>(null);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+
+    const startSession = async () => {
