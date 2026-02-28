@@ -34,16 +34,16 @@ const startSession = async () => {
         scriptProcessorRef.current = processor;
 
         processor.onaudioprocess = (e) => {
-          if (wsRef.current?.readyState === WebSocket.OPEN) {
+            if (wsRef.current?.readyState === WebSocket.OPEN) {
             const float32 = e.inputBuffer.getChannelData(0);
             // Convert Float32 → Int16 PCM for Gemini
             const int16 = new Int16Array(float32.length);
             for (let i = 0; i < float32.length; i++) {
-              const s = Math.max(-1, Math.min(1, float32[i]));
+                const s = Math.max(-1, Math.min(1, float32[i]));
               int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
             }
             wsRef.current.send(int16.buffer);
-          }
+            }
         };
 
         source.connect(processor);
