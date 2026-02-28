@@ -53,7 +53,7 @@ async def audio_endpoint(websocket: WebSocket):
                 automatic_activity_detection=types.AutomaticActivityDetection(
                     disabled=False,
                     start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_LOW,
-                    end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_LOW,
+                    end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_HIGH,
                 ),
             ),
             system_instruction=types.Content(
