@@ -8,7 +8,6 @@ interface VoiceAuraContainerProps {
 export default function VoiceAuraContainer({ isActive, children }: VoiceAuraContainerProps) {
     return (
         <div className="relative flex items-center justify-center aspect-square w-80">
-
             {isActive && (
                 <div 
                     className="absolute inset-0 rounded-full bg-white/20 animate-ping" 
