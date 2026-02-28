@@ -31,3 +31,4 @@
 Follow these steps to clone the repository and run both the Next.js frontend and the FastAPI backend on your local machine.
 ---
 ### Prerequisites
+Make sure you have the following installed on your system:
