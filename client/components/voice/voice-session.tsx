@@ -33,3 +33,4 @@ export default function VoiceSession() {
                 const audio = new Audio(audioUrl);
                 await audio.play();
             };
+            wsRef.current.onclose = () => {
