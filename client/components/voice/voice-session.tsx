@@ -27,3 +27,5 @@ export default function VoiceSession() {
                 };
                 mediaRecorderRef.current.start(250);
             };
+            wsRef.current.onmessage = async (event) => {
+                const audioBlob = new Blob([event.data], { type: "audio/pcm" });
