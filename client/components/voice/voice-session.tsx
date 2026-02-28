@@ -52,4 +52,4 @@ export default function VoiceSession() {
         setIsSpeaking(false);
         setIsConnected(false);
         };
-    
+    return (
