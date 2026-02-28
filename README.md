@@ -39,3 +39,4 @@ Make sure you have the following installed on your system:
 
 ---
 ### Step 1: Clone the Repository
+Open your terminal and clone the project to your local machine:
