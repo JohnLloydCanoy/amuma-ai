@@ -49,3 +49,4 @@ async def audio_endpoint(websocket: WebSocket):
                 try:
                     async for response in session.receive():
                         server_content = response.server_content
+                        if server_content and server_content.model_turn:
