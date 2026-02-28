@@ -35,3 +35,4 @@ Make sure you have the following installed on your system:
 * [Node.js](https://nodejs.org/) (v18 or higher)
 * [Python](https://www.python.org/downloads/) (3.10 or higher)
 * [Git](https://git-scm.com/)
+* A Gemini API Key from [Google AI Studio](https://aistudio.google.com/)
