@@ -48,3 +48,4 @@ async def audio_endpoint(websocket: WebSocket):
             async def receive_from_gemini():
                 try:
                     async for response in session.receive():
+                        server_content = response.server_content
