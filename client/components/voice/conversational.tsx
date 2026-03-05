@@ -18,16 +18,17 @@ export interface ConversationActions {
 }
 
 // ─── Constants ─────────────────────────────────────────────
-const WS_URL = process.env.NEXT_PUBLIC_API_WS_URL ?? "ws://localhost:8000/ws/audio";
-const INPUT_SAMPLE_RATE = 16000;   // Gemini expects 16kHz input
-const OUTPUT_SAMPLE_RATE = 24000;  // Gemini outputs 24kHz audio
+const WS_URL =
+  process.env.NEXT_PUBLIC_API_WS_URL ?? "ws://localhost:8000/ws/audio";
+const INPUT_SAMPLE_RATE = 16000;
+const OUTPUT_SAMPLE_RATE = 24000;
 const BUFFER_SIZE = 4096;
-const SPEECH_THRESHOLD = 0.015;    // RMS threshold for speech detection
-const SILENCE_FRAMES_TO_END = 10;  // ~2.5s of silence before signaling end (at 256ms/frame)
+// After AI finishes speaking, wait this many ms before opening mic
+// to let echo cancellation settle
+const MIC_OPEN_DELAY_MS = 600;
 
 // ─── Audio Helpers ─────────────────────────────────────────
 
-/** Convert Float32 mic samples → Int16 PCM bytes for Gemini */
 function float32ToInt16(float32: Float32Array): ArrayBuffer {
   const int16 = new Int16Array(float32.length);
   for (let i = 0; i < float32.length; i++) {
@@ -37,7 +38,6 @@ function float32ToInt16(float32: Float32Array): ArrayBuffer {
   return int16.buffer;
 }
 
-/** Convert Int16 PCM bytes from Gemini → Float32 for Web Audio playback */
 function int16ToFloat32(buffer: ArrayBuffer): Float32Array<ArrayBuffer> {
   const int16 = new Int16Array(buffer);
   const float32 = new Float32Array(int16.length) as Float32Array<ArrayBuffer>;
@@ -49,212 +49,194 @@ function int16ToFloat32(buffer: ArrayBuffer): Float32Array<ArrayBuffer> {
 
 // ─── Hook ──────────────────────────────────────────────────
 
-/**
- * useConversation — manages a full-duplex voice session.
- *
- * Responsibilities:
- *  1. Mic capture → VAD → PCM encode → WebSocket send
- *  2. WebSocket receive → PCM decode → sequential playback
- *  3. Turn-state tracking (listening vs ai-speaking)
- *
- * Intentionally keeps NO UI — that stays in the component layer.
- */
 export function useConversation(): [ConversationState, ConversationActions] {
-  // ── State ──────────────────────────────────────────
   const [status, setStatus] = useState<SessionStatus>("idle");
   const [turn, setTurn] = useState<TurnState>("idle");
   const [error, setError] = useState<string | null>(null);
 
-  // ── Refs (mutable across renders, no re-render cost) ──
   const wsRef = useRef<WebSocket | null>(null);
-  const micCtxRef = useRef<AudioContext | null>(null);      // 16kHz for mic capture
-  const playbackCtxRef = useRef<AudioContext | null>(null);  // 24kHz for playback
+  const micCtxRef = useRef<AudioContext | null>(null);
+  const playCtxRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
-  const micStreamRef = useRef<MediaStream | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const nextPlayRef = useRef(0);
   const turnRef = useRef<TurnState>("idle");
-  const isSpeakingRef = useRef(false);   // tracks whether we've sent ACTIVITY_START
-  const silenceCountRef = useRef(0);     // consecutive silent frames counter
+  const turnCompleteRef = useRef(false);
 
-  // ── Cleanup helper ─────────────────────────────────
+  const goListening = useCallback(() => {
+    // Delay mic open so echo cancellation can settle
+    setTimeout(() => {
+      // Only transition if still expected (not already ai-speaking again)
+      if (turnCompleteRef.current) {
+        console.log("[turn] → listening (mic open)");
+        turnRef.current = "listening";
+        setTurn("listening");
+        turnCompleteRef.current = false;
+      }
+    }, MIC_OPEN_DELAY_MS);
+  }, []);
+
   const cleanup = useCallback(() => {
     processorRef.current?.disconnect();
     processorRef.current = null;
-
-    micStreamRef.current?.getTracks().forEach((t) => t.stop());
-    micStreamRef.current = null;
-
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
     wsRef.current?.close();
     wsRef.current = null;
-
     micCtxRef.current?.close();
     micCtxRef.current = null;
-
-    playbackCtxRef.current?.close();
-    playbackCtxRef.current = null;
-
+    playCtxRef.current?.close();
+    playCtxRef.current = null;
     nextPlayRef.current = 0;
     turnRef.current = "idle";
-    isSpeakingRef.current = false;
-    silenceCountRef.current = 0;
+    turnCompleteRef.current = false;
     setTurn("idle");
     setStatus("idle");
   }, []);
 
-  // ── Start Session ──────────────────────────────────
   const start = useCallback(async () => {
     try {
       setStatus("connecting");
       setError(null);
 
-      // 1) Audio contexts — separate sample rates for input vs output
-      const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      const micCtx = new Ctx({ sampleRate: INPUT_SAMPLE_RATE });
+      const ACtor =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext })
+          .webkitAudioContext;
+
+      // Separate contexts: 16 kHz mic, 24 kHz playback
+      const micCtx = new ACtor({ sampleRate: INPUT_SAMPLE_RATE });
       await micCtx.resume();
       micCtxRef.current = micCtx;
+      console.log(`[mic] AudioContext sample rate: ${micCtx.sampleRate}`);
 
-      const playbackCtx = new Ctx({ sampleRate: OUTPUT_SAMPLE_RATE });
-      await playbackCtx.resume();
-      playbackCtxRef.current = playbackCtx;
+      const playCtx = new ACtor({ sampleRate: OUTPUT_SAMPLE_RATE });
+      await playCtx.resume();
+      playCtxRef.current = playCtx;
+      console.log(`[play] AudioContext sample rate: ${playCtx.sampleRate}`);
 
-      // 2) Microphone
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      micStreamRef.current = stream;
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+      streamRef.current = stream;
+      console.log("[mic] Got media stream");
 
-      // 3) WebSocket
       const ws = new WebSocket(WS_URL);
       wsRef.current = ws;
 
+      // ── On open: wire up mic capture ──
       ws.onopen = () => {
+        console.log("[ws] Connected");
         setStatus("connected");
         turnRef.current = "ai-speaking";
-        setTurn("ai-speaking"); // Gemini greets first
+        setTurn("ai-speaking");
 
-        // ── Mic → PCM → WS (with VAD) — uses 16kHz mic context ──
-        const micSource = micCtx.createMediaStreamSource(stream);
-        const processor = micCtx.createScriptProcessor(BUFFER_SIZE, 1, 1);
-        processorRef.current = processor;
+        const src = micCtx.createMediaStreamSource(stream);
+        const proc = micCtx.createScriptProcessor(BUFFER_SIZE, 1, 1);
+        processorRef.current = proc;
 
-        processor.onaudioprocess = (e) => {
+        let frameCount = 0;
+        proc.onaudioprocess = (e) => {
           if (ws.readyState !== WebSocket.OPEN) return;
-          if (turnRef.current === "ai-speaking") {
-            // Reset speech state while AI talks
-            isSpeakingRef.current = false;
-            silenceCountRef.current = 0;
-            return;
-          }
+
+          // Don't send while AI is speaking — prevents echo feedback
+          if (turnRef.current !== "listening") return;
 
           const samples = e.inputBuffer.getChannelData(0);
-
-          // Calculate RMS energy
-          let sum = 0;
-          for (let i = 0; i < samples.length; i++) {
-            sum += samples[i] * samples[i];
-          }
-          const rms = Math.sqrt(sum / samples.length);
-          const isVoice = rms >= SPEECH_THRESHOLD;
-
-          // Send activity signals to server for manual turn-taking
-          if (isVoice) {
-            silenceCountRef.current = 0;
-            if (!isSpeakingRef.current) {
-              isSpeakingRef.current = true;
-              ws.send("ACTIVITY_START");
-              console.log("\ud83c\udfa4 Speech detected — ACTIVITY_START");
-            }
-          } else {
-            if (isSpeakingRef.current) {
-              silenceCountRef.current++;
-              if (silenceCountRef.current >= SILENCE_FRAMES_TO_END) {
-                isSpeakingRef.current = false;
-                silenceCountRef.current = 0;
-                ws.send("ACTIVITY_END");
-                console.log("\ud83d\udd07 Silence detected — ACTIVITY_END");
-              }
-            }
-          }
-
-          // Always send audio so Gemini can hear everything
           ws.send(float32ToInt16(samples));
+
+          frameCount++;
+          if (frameCount % 40 === 0) {
+            // Log every ~10 seconds to confirm mic is streaming
+            console.log(`[mic] Sent ${frameCount} audio frames`);
+          }
         };
 
-        micSource.connect(processor);
-        processor.connect(micCtx.destination);
+        src.connect(proc);
+        proc.connect(micCtx.destination);
+        console.log("[mic] Processor connected");
       };
 
-      // ── WS → PCM → sequential playback ──
-      ws.onmessage = async (event) => {
-        // Handle turn-complete text signal from backend
-        if (typeof event.data === "string") {
-          if (event.data === "TURN_COMPLETE") {
-            console.log("✓ AI turn complete — now listening");
-            turnRef.current = "listening";
-            setTurn("listening");
+      // ── On message: play audio or handle signals ──
+      ws.onmessage = async (ev) => {
+        if (typeof ev.data === "string") {
+          console.log(`[ws] Text: ${ev.data}`);
+          if (ev.data === "TURN_COMPLETE") {
+            turnCompleteRef.current = true;
+            // Check if audio already finished playing (or none was scheduled)
+            const ctx = playCtxRef.current;
+            if (!ctx || ctx.currentTime >= nextPlayRef.current - 0.05) {
+              // No audio playing or all done — transition now
+              goListening();
+            }
+            // Otherwise, source.onended will call goListening()
           }
           return;
         }
 
-        if (!(event.data instanceof Blob)) return;
+        if (!(ev.data instanceof Blob)) return;
 
-        const arrayBuf = await event.data.arrayBuffer();
-        const float32 = int16ToFloat32(arrayBuf);
-        if (float32.length === 0 || !playbackCtxRef.current) return;
+        const buf = await ev.data.arrayBuffer();
+        if (buf.byteLength === 0 || !playCtxRef.current) return;
 
-        console.log(`\ud83d\udd0a Playing ${float32.length} samples`);
+        const ctx = playCtxRef.current;
+        if (ctx.state === "suspended") await ctx.resume();
 
+        // Mark AI as speaking — blocks mic
+        if (turnRef.current !== "ai-speaking") {
+          console.log("[turn] → ai-speaking");
+        }
         turnRef.current = "ai-speaking";
         setTurn("ai-speaking");
+        turnCompleteRef.current = false;
 
-        const ctx = playbackCtxRef.current;
-        // Ensure context is running (browser may suspend it)
-        if (ctx.state === "suspended") await ctx.resume();
-        const buf = ctx.createBuffer(1, float32.length, OUTPUT_SAMPLE_RATE);
-        buf.copyToChannel(float32, 0);
+        const pcm = int16ToFloat32(buf);
+        const abuf = ctx.createBuffer(1, pcm.length, OUTPUT_SAMPLE_RATE);
+        abuf.copyToChannel(pcm, 0);
 
         const source = ctx.createBufferSource();
-        source.buffer = buf;
+        source.buffer = abuf;
         source.connect(ctx.destination);
 
         const now = ctx.currentTime;
-        const startAt = Math.max(now, nextPlayRef.current);
-        source.start(startAt);
-        nextPlayRef.current = startAt + buf.duration;
+        const at = Math.max(now, nextPlayRef.current);
+        source.start(at);
+        nextPlayRef.current = at + abuf.duration;
 
-        // When this chunk finishes, revert to listening
         source.onended = () => {
-          if (ctx.currentTime >= nextPlayRef.current - 0.05) {
-            turnRef.current = "listening";
-            setTurn("listening");
+          if (!playCtxRef.current) return;
+          const isLast =
+            playCtxRef.current.currentTime >= nextPlayRef.current - 0.05;
+          if (isLast && turnCompleteRef.current) {
+            // All audio played AND Gemini confirmed turn complete
+            goListening();
           }
         };
       };
 
-      ws.onclose = (e) => {
-        console.log(`WS closed: ${e.code} ${e.reason}`);
+      ws.onclose = () => {
+        console.log("[ws] Closed");
         cleanup();
       };
-
-      ws.onerror = () => {
-        setError("Connection to server failed");
+      ws.onerror = (e) => {
+        console.error("[ws] Error", e);
+        setError("Connection failed");
         cleanup();
         setStatus("error");
       };
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Unknown error";
-      console.error("Session start failed:", msg);
-      setError(msg);
+      console.error("[start] Error", err);
+      setError(err instanceof Error ? err.message : "Unknown error");
       cleanup();
       setStatus("error");
     }
-  }, [cleanup]);
+  }, [cleanup, goListening]);
 
-  // ── Stop Session ───────────────────────────────────
-  const stop = useCallback(() => {
-    cleanup();
-  }, [cleanup]);
+  const stop = useCallback(() => cleanup(), [cleanup]);
 
-  return [
-    { status, turn, error },
-    { start, stop },
-  ];
+  return [{ status, turn, error }, { start, stop }];
 }

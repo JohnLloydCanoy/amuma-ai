@@ -1,4 +1,6 @@
 import os
+import struct
+import math
 import asyncio
 import random
 from dotenv import load_dotenv
@@ -8,12 +10,12 @@ from google import genai
 from google.genai import types
 
 load_dotenv()
-client = genai.Client(api_key=os.getenv('GEMINI_API_KEY'))
+client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 app = FastAPI(
     title="Amuma AI API",
     description="Backend for the Amuma Pre-Therapy Triage Agent",
-    version="1.0.0"
+    version="1.0.0",
 )
 
 app.add_middleware(
@@ -30,22 +32,35 @@ async def root():
     return {"status": "online", "message": "Amuma AI backend is ready."}
 
 
-# ─── Check-in prompts when user is silent ───────────────────
+# ─── Server-side VAD constants ──────────────────────────────
+# Int16 RMS threshold (raised to avoid echo triggers)
+SPEECH_RMS_THRESHOLD = 300
+SILENCE_CHUNKS_TO_END = 8        # ~2s of silence after speech ends
+# Ignore first ~1s of audio after AI finishes (echo)
+POST_TURN_GRACE_CHUNKS = 4
 CHECK_IN_PROMPTS = [
-    "The user has been quiet for a while. Gently check in — ask if they're still there or if they need a moment.",
-    "The user hasn't spoken. Softly ask if everything is okay, maybe they're gathering their thoughts.",
-    "It's been quiet. Warmly let them know you're still here and there's no rush.",
-    "The user paused. Offer a kind nudge — ask if they'd like to continue or if silence feels right.",
-    "No response for a bit. Reassure them that it's okay to take their time, and you're listening whenever they're ready.",
-    "The user went silent. Ask a gentle open-ended question to help them feel comfortable sharing.",
+    "The user has been quiet. Gently check if they're still there.",
+    "It's been quiet. Warmly let them know you're still here.",
+    "The user paused. Ask if they'd like to continue.",
 ]
-SILENCE_CHECK_IN_SECONDS = 10
+SILENCE_CHECK_IN_SECONDS = 15
+
+
+def compute_rms_int16(data: bytes) -> float:
+    """Compute RMS of Int16 PCM audio bytes."""
+    if len(data) < 2:
+        return 0.0
+    n_samples = len(data) // 2
+    samples = struct.unpack(f"<{n_samples}h", data[:n_samples * 2])
+    sum_sq = sum(s * s for s in samples)
+    return math.sqrt(sum_sq / n_samples)
 
 
 @app.websocket("/ws/audio")
 async def audio_endpoint(websocket: WebSocket):
     await websocket.accept()
-    print("Next.js Frontend connected to Amuma Backend!")
+    print("✓ Frontend connected")
+
     try:
         config = types.LiveConnectConfig(
             response_modalities=["AUDIO"],
@@ -58,128 +73,165 @@ async def audio_endpoint(websocket: WebSocket):
             ),
             realtime_input_config=types.RealtimeInputConfig(
                 automatic_activity_detection=types.AutomaticActivityDetection(
-                    disabled=True,  # We manage turn-taking manually from the client
+                    disabled=True,
                 ),
             ),
             system_instruction=types.Content(
                 parts=[types.Part(text=(
                     "You are Amuma, a safe, empathetic pre-therapy active listening companion. "
                     "Warmly greet the user and ask what is on their mind. "
-                    "Keep responses brief and comforting. "
-                    "IMPORTANT: Ignore any background noise, keyboard clicks, ambient sounds, "
-                    "or non-speech audio. Only respond to clear human speech directed at you."
+                    "Keep responses brief and comforting."
                 ))]
             ),
         )
-        async with client.aio.live.connect(model="gemini-2.5-flash-native-audio-latest", config=config) as session:
-            print("Backend successfully connected to Gemini Live API!")
 
-            # Trigger Gemini's first greeting
+        async with client.aio.live.connect(
+            model="gemini-2.5-flash-native-audio-latest", config=config
+        ) as session:
+            print("✓ Connected to Gemini Live API")
+
+            # Trigger Gemini's greeting
             await session.send_client_content(
-                turns=types.Content(role="user", parts=[
-                    types.Part(text="Hello")]),
+                turns=types.Content(
+                    role="user", parts=[types.Part(text="Hello")]
+                ),
                 turn_complete=True,
             )
 
-            last_audio_time = asyncio.get_event_loop().time()
+            # ── Shared state ──
             session_active = True
+            user_is_speaking = False
+            silence_count = 0
+            # start in grace period (greeting)
+            grace_count = POST_TURN_GRACE_CHUNKS
+            last_audio_time = asyncio.get_event_loop().time()
+            chunks_received = 0
 
-            # Task A: Receive messages from client (text signals + audio bytes)
+            # ── Task A: Receive audio from frontend, do VAD, forward to Gemini ──
             async def receive_from_client():
-                nonlocal last_audio_time, session_active
-                INACTIVITY_TIMEOUT = 120
+                nonlocal session_active, user_is_speaking, silence_count
+                nonlocal grace_count, last_audio_time, chunks_received
+
                 try:
-                    while True:
+                    while session_active:
                         try:
-                            msg = await asyncio.wait_for(
-                                websocket.receive(), timeout=INACTIVITY_TIMEOUT
+                            data = await asyncio.wait_for(
+                                websocket.receive_bytes(), timeout=120
                             )
                         except asyncio.TimeoutError:
-                            print("Inactivity timeout — closing session.")
+                            print("⏰ Inactivity timeout")
                             session_active = False
-                            await websocket.close(1000, "Inactivity timeout")
                             return
 
-                        # Text signals from frontend VAD
-                        if "text" in msg:
-                            signal = msg["text"]
-                            if signal == "ACTIVITY_START":
-                                print("  ▶ User started speaking")
+                        chunks_received += 1
+                        last_audio_time = asyncio.get_event_loop().time()
+
+                        # Always forward audio to Gemini
+                        await session.send_realtime_input(
+                            audio=types.Blob(data=data, mime_type="audio/pcm")
+                        )
+
+                        # Grace period after AI finishes — ignore VAD
+                        if grace_count > 0:
+                            grace_count -= 1
+                            if grace_count == 0:
+                                print("  ✓ Grace period over — VAD active")
+                            continue
+
+                        # Server-side VAD on the raw Int16 PCM
+                        rms = compute_rms_int16(data)
+                        is_voice = rms > SPEECH_RMS_THRESHOLD
+
+                        # Log RMS periodically so we can tune threshold
+                        if chunks_received % 20 == 0:
+                            print(
+                                f"  ~ RMS={rms:.0f} "
+                                f"(threshold={SPEECH_RMS_THRESHOLD}, "
+                                f"speaking={user_is_speaking})"
+                            )
+
+                        if is_voice:
+                            silence_count = 0
+                            if not user_is_speaking:
+                                user_is_speaking = True
+                                print(f"  ▶ Speech detected (RMS={rms:.0f})")
                                 await session.send_realtime_input(
                                     activity_start=types.ActivityStart()
                                 )
-                            elif signal == "ACTIVITY_END":
-                                print("  ■ User stopped speaking")
-                                await session.send_realtime_input(
-                                    activity_end=types.ActivityEnd()
-                                )
-                            continue
-
-                        # Binary audio data
-                        if "bytes" in msg:
-                            data = msg["bytes"]
-                            last_audio_time = asyncio.get_event_loop().time()
-                            await session.send_realtime_input(
-                                audio=types.Blob(
-                                    data=data, mime_type="audio/pcm")
-                            )
+                        else:
+                            if user_is_speaking:
+                                silence_count += 1
+                                if silence_count >= SILENCE_CHUNKS_TO_END:
+                                    user_is_speaking = False
+                                    silence_count = 0
+                                    print(
+                                        "  ■ Speech ended — sending ACTIVITY_END")
+                                    await session.send_realtime_input(
+                                        activity_end=types.ActivityEnd()
+                                    )
 
                 except WebSocketDisconnect:
-                    print("User disconnected.")
+                    print("Client disconnected")
                     session_active = False
                 except Exception as e:
-                    print(f"Error receiving from frontend: {e}")
+                    print(f"Error in receive_from_client: {e}")
                     session_active = False
 
-            # Task B: Forward Gemini audio to client + signal turn completion
+            # ── Task B: Forward Gemini audio to frontend ──
             async def receive_from_gemini():
+                nonlocal session_active, grace_count, user_is_speaking, silence_count
                 try:
                     async for response in session.receive():
-                        server_content = response.server_content
-                        if server_content and server_content.model_turn:
-                            for part in server_content.model_turn.parts:
+                        sc = response.server_content
+                        if sc and sc.model_turn:
+                            for part in sc.model_turn.parts:
                                 if part.inline_data:
-                                    print(
-                                        f"  → Sending {len(part.inline_data.data)} bytes to client")
-                                    await websocket.send_bytes(part.inline_data.data)
-                        if server_content and server_content.turn_complete:
+                                    await websocket.send_bytes(
+                                        part.inline_data.data
+                                    )
+                        if sc and sc.turn_complete:
                             print("  ✓ Gemini turn complete")
+                            # Reset VAD state and start grace period
+                            user_is_speaking = False
+                            silence_count = 0
+                            grace_count = POST_TURN_GRACE_CHUNKS
                             await websocket.send_text("TURN_COMPLETE")
                 except Exception as e:
-                    print(f"Error receiving from Gemini: {e}")
+                    print(f"Error in receive_from_gemini: {e}")
+                    session_active = False
 
-            # Task C: Nudge Gemini if the user is silent for too long
+            # ── Task C: Silence check-in ──
             async def silence_check_in():
                 nonlocal last_audio_time, session_active
                 try:
                     while session_active:
-                        await asyncio.sleep(2)
+                        await asyncio.sleep(3)
                         elapsed = asyncio.get_event_loop().time() - last_audio_time
                         if elapsed >= SILENCE_CHECK_IN_SECONDS:
                             prompt = random.choice(CHECK_IN_PROMPTS)
-                            print(
-                                f"  ⏳ User silent {elapsed:.0f}s — nudging Gemini")
+                            print(f"  ⏳ Silent {elapsed:.0f}s — nudging")
                             await session.send_client_content(
                                 turns=types.Content(
                                     role="user",
-                                    parts=[types.Part(text=prompt)]
+                                    parts=[types.Part(text=prompt)],
                                 ),
                                 turn_complete=True,
                             )
                             last_audio_time = asyncio.get_event_loop().time()
                 except Exception as e:
-                    print(f"Error in silence check-in: {e}")
+                    print(f"Error in silence_check_in: {e}")
                     session_active = False
 
             await asyncio.gather(
                 receive_from_client(),
                 receive_from_gemini(),
-                silence_check_in()
+                silence_check_in(),
             )
+
     except Exception as e:
         print(f"Gemini connection error: {e}")
     finally:
         try:
             await websocket.close()
         except Exception:
-            pass  # already closed
+            pass
